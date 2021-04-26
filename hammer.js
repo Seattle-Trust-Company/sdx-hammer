@@ -2,6 +2,9 @@
 // Imports
 const Web3 = require('web3');
 
+const BOOT_IP = "3.141.232.198";
+const BOOT_ENODE = `enode://ffb143c241fec6cde474e28106d162ae5107e2d0ab322b27d71ec32567a650c1077bbdefc4951efbcb400de02ff86621c49b7d0d4dfdecc7862f979942a43c5e@${BOOT_IP}:30303`;
+
 // Set-up Web3
 let web3 = new Web3("http://localhost:8000");
 
