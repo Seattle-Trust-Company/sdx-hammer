@@ -2,8 +2,27 @@
 // Imports
 const Web3 = require('web3');
 
+const BOOT_IP = "3.141.232.198";
+const BOOT_ENODE = `enode://ffb143c241fec6cde474e28106d162ae5107e2d0ab322b27d71ec32567a650c1077bbdefc4951efbcb400de02ff86621c49b7d0d4dfdecc7862f979942a43c5e@${BOOT_IP}:30303`;
+
 // Set-up Web3
 let web3 = new Web3("http://localhost:8000");
+
+// @desc Send Transactions
+function sendTransaction(account, receiver) {
+  let transaction = await web3.eth.sendTransaction({
+    'from': account,
+    'to': receiver,
+    'value': 10000
+  })
+
+  console.log("Transaction: ", transaction)
+  let transactionBlock = transaction['blockNumber']
+
+  // Check Block
+  let block = await web3.eth.getBlock(transactionBlock, true)
+  console.log("Block: ", block)
+}
 
 // @desc  Main Driver
 // @note  Once we submit a transaction to the bootnode, check after some time that ...
@@ -30,20 +49,23 @@ const main = async() => {
   // @FIXME: Get rid of awaits
   // @TODO: Measure how many sent
 
+  let transactionsSent = 0;
 
-  // Send Transaction(s)
-  let receiver = account
-  let transaction = await web3.eth.sendTransaction({
-    'from': account,
-    'to': receiver,
-    'value': 10000
-  })
-  console.log("Transaction: ", transaction)
-  let transactionBlock = transaction['blockNumber']
+  // Repeats the function sendTransaction every .5 seconds
+  let transactionSender = setInterval(() => {
+	  let account = "test";
+	  let receiver = "test 2";
+	  sendTransaction(account, receiver);
+    transactionsSent++;
+  }, 500)
 
-  // Check Block
-  let block = await web3.eth.getBlock(transactionBlock, true)
-  console.log("Block: ", block)
+
+  // Stops interval after 1 min
+  setTimeout(() => {
+	  clearInterval(transactionSender);
+	  console.log("transaction sender stopped");
+  }, 60000);
+  
 
   // After X amount of transactions,
   // we can evaluate performance.
@@ -54,5 +76,5 @@ const main = async() => {
 }
 
 // Call Main Function
-main()
+main();
 
