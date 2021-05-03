@@ -102,19 +102,47 @@ async function getTransactionResults(transactions) {
 const main = async () => {
 
   // Setup Web3
-  let peerCount = await web3.eth.net.getPeerCount()
-  let accounts = await web3.eth.getAccounts()
-  let account = accounts[0]
-  let balance = await web3.eth.getBalance(account)
-  await web3.eth.personal.unlockAccount(account, '12345', 60000)
+  const peerCount = await web3.eth.net.getPeerCount()
+  const accounts = await web3.eth.getAccounts()
+  const account = accounts[0]
+  const balance = await web3.eth.getBalance(account)
 
-  // Log Information
+  // Run Information
   console.log("RUN INFORMATION")
   console.log("Peer Count: " + peerCount)
   console.log("Account: " + account)
   console.log("Balance: " + balance)
   console.log("Target Transaction Amount: " + NUM_TRANSACTIONS)
   console.log("")
+
+  // Unlock Account and Determine Latency
+  const beforeUnlockTime = new Date()
+  await web3.eth.personal.unlockAccount(account, '12345', 60000)
+  const afterUnlockTime = new Date()
+  const latency = (afterUnlockTime - beforeUnlockTime) / 2
+
+  // Find Difference in Time Synchronization ...
+  // ... by sending and waiting for 1 transaction
+  let transaction = await web3.eth.sendTransaction({
+    'from': account,
+    'to': RECIPIENTS[0],
+    'value': 10000
+  })
+  const afterTransactionTime = new Date()
+
+  // Get Block Timestamp
+  const setupBlock = await web3.eth.getBlock(transaction.blockNumber)
+  const setupBlockMineTime = new Date(setupBlock.timestamp * 1000)
+  const timeDifference = afterTransactionTime - setupBlockMineTime + latency
+
+  // Run-Time Information
+  console.log("RUN-TIME INFORMATION")
+  console.log("Latency: " + latency)
+  console.log("Timestamp Difference (ms): " + timeDifference)
+  console.log("")
+
+  // @TODO: Remove
+  throw new Error();
 
   // Create List of Transactions
   let transactions = []
