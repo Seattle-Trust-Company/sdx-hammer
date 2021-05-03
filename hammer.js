@@ -47,7 +47,7 @@ function sendTransaction(transactions, account, receiver, date) {
 
 }
 
-async function getResult(transaction, data, results, blocks) {
+async function getResult(transaction, data, results, blocks, timeDifference) {
   p = new Promise(async function (resolve, reject) {
     // Get Mined Time (if not in cache)
     if (!blocks[data.blockNumber]) {
@@ -68,14 +68,14 @@ async function getResult(transaction, data, results, blocks) {
       sent: transaction.sent,
       miner: blocks[data.blockNumber].miner,
       mined: blocks[data.blockNumber].convertedTimestamp,
-      duration: Math.abs(blocks[data.blockNumber].convertedTimestamp - transaction.sent)
+      duration: blocks[data.blockNumber].convertedTimestamp - transaction.sent + timeDifference
     }
     resolve(result);
   })
   return p;
 }
 
-async function getTransactionResults(transactions) {
+async function getTransactionResults(transactions, timeDifference) {
   // Create Promise
   p = new Promise(async function (resolve, reject) {
     let blocks = {}   // Block Cache
@@ -155,7 +155,7 @@ const main = async () => {
   }
 
   // Get Transaction Results for Evaluation
-  const results = await getTransactionResults(transactions);
+  const results = await getTransactionResults(transactions, timeDifference);
 
   // Set Up Results per Pool
   let poolResults = {}
