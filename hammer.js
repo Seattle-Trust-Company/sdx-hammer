@@ -13,12 +13,17 @@ let web3 = new Web3("http://localhost:8000");
 
 /** Globals **/
 
-const NUM_TRANSACTIONS = 4;
+const NUM_TRANSACTIONS = 3000;
 const RECIPIENTS = ['0x3796Fd13E83d53B8378A2C849F0E1AcA29e8C144'];
 const POOLS = {
   '0x9Dca0717054729D9A199162508C491ee6E5998cE': {
     name: 'bigsur',
     address: '0x9Dca0717054729D9A199162508C491ee6E5998cE',
+    size: 2
+  },
+  '0x4Dd7deF2eD4c5eeDc234bC9f56A5106baCf1c1Ab': {
+    name: 'tahoe',
+    address: '0x4Dd7deF2eD4c5eeDc234bC9f56A5106baCf1c1Ab',
     size: 4
   }
 }
@@ -62,13 +67,14 @@ async function getResult(transaction, data, results, blocks, timeDifference) {
     }
 
     // Log Information
+    let dur = (blocks[data.blockNumber].convertedTimestamp - transaction.sent) - timeDifference
     let result = {
       hash: data.transactionHash,
       blockNumber: data.blockNumber,
       sent: transaction.sent,
       miner: blocks[data.blockNumber].miner,
       mined: blocks[data.blockNumber].convertedTimestamp,
-      duration: blocks[data.blockNumber].convertedTimestamp - transaction.sent + timeDifference
+      duration: dur
     }
     resolve(result);
   })
@@ -82,16 +88,17 @@ async function getTransactionResults(transactions, timeDifference) {
     let results = {}  // Results
 
     // Create Evaluation Input
-    count = 0;
     for (let i = 0; i < NUM_TRANSACTIONS; i++) {
       transaction = transactions[i];
-      count++;
-      let data = await transaction.data.then(async (data) => {
-        let result = await getResult(transaction, data, results, blocks);
-        results[data.transactionHash] = result;
-      })
+      let data = await transaction.data
+        .catch((err) => {
+          reject(new Error('Transaction Failed'))
+        }).then(async (data) => {
+          let result = await getResult(transaction, data, results, blocks, timeDifference);
+          results[data.transactionHash] = result;
+        })
     }
-    if (count == NUM_TRANSACTIONS) resolve(results);
+    resolve(results);
   })
   return p;
 }
@@ -117,7 +124,7 @@ const main = async () => {
 
   // Unlock Account and Determine Latency
   const beforeUnlockTime = new Date()
-  await web3.eth.personal.unlockAccount(account, '12345', 60000)
+  await web3.eth.personal.unlockAccount(account, '12345', 300)
   const afterUnlockTime = new Date()
   const latency = (afterUnlockTime - beforeUnlockTime) / 2
 
@@ -133,16 +140,15 @@ const main = async () => {
   // Get Block Timestamp
   const setupBlock = await web3.eth.getBlock(transaction.blockNumber)
   const setupBlockMineTime = new Date(setupBlock.timestamp * 1000)
-  const timeDifference = afterTransactionTime - setupBlockMineTime + latency
+  const timeDifference = setupBlockMineTime - afterTransactionTime - latency
 
   // Run-Time Information
   console.log("RUN-TIME INFORMATION")
   console.log("Latency: " + latency)
+  console.log("Received Confirmation At: " + afterTransactionTime)
+  console.log("Block Timestamp: " + setupBlockMineTime)
   console.log("Timestamp Difference (ms): " + timeDifference)
   console.log("")
-
-  // @TODO: Remove
-  throw new Error();
 
   // Create List of Transactions
   let transactions = []
@@ -153,9 +159,11 @@ const main = async () => {
     let currentDate = new Date()
     sendTransaction(transactions, account, receiver, currentDate);
   }
+  console.log("Sent Transactions")
 
   // Get Transaction Results for Evaluation
   const results = await getTransactionResults(transactions, timeDifference);
+  console.log("Got Transaction Results")
 
   // Set Up Results per Pool
   let poolResults = {}
@@ -165,6 +173,7 @@ const main = async () => {
       transactionCount: 0
     }
   }
+  console.log("After Set up Pool Results")
 
   // Performance Evaluation
   let totalDuration = 0;
@@ -177,10 +186,12 @@ const main = async () => {
     poolResults[results[result].miner].duration += results[result].duration
 
   }
+  console.log("After Set up Results")
 
   // Print Total Evaluation Results
   console.log("NETWORK PERFORMANCE EVALUATION")
   console.log("Total Duration (ms): " + totalDuration)
+  console.log("Duration per Transaction (ms): " + (totalDuration / NUM_TRANSACTIONS))
   console.log("")
 
   // Print Pool Evaluation Results
