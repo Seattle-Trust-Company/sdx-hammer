@@ -219,7 +219,8 @@ const main = async () => {
   for (const pool in POOLS) {
     poolResults[POOLS[pool].address] = {
       duration: 0,
-      transactionCount: 0
+      transactionCount: 0,
+      blocks: new Set()
     }
   }
 
@@ -232,6 +233,7 @@ const main = async () => {
     // Durations per Pool
     poolResults[results[result].miner].transactionCount += 1
     poolResults[results[result].miner].duration += results[result].duration
+    poolResults[results[result].miner].blocks.add(results[result].blockNumber)
 
   }
 
@@ -247,6 +249,7 @@ const main = async () => {
   for (const pool in poolResults) {
     console.log("Pool " + POOLS[pool].name + " Results")
     console.log(" - Number of Miners: " + POOLS[pool].size)
+    console.log(" - Number of Blocks Mined: " + poolResults[pool].blocks.size)
     console.log(" - Transaction Count: " + poolResults[pool].transactionCount)
     console.log(" - Transaction Percentage: " + (poolResults[pool].transactionCount / NUM_TRANSACTIONS * 100) + "%")
     console.log(" - Average Transaction Duration (ms): " + (poolResults[pool].duration / poolResults[pool].transactionCount))
