@@ -7,6 +7,7 @@
 
 
 /** Imports **/
+
 const Web3 = require('web3');
 let web3 = new Web3("http://localhost:8000");
 
@@ -14,11 +15,18 @@ let web3 = new Web3("http://localhost:8000");
 /** Globals **/
 
 const NUM_TRANSACTIONS = 4;
+const BATCH_SIZE = 2;
+const PASSWORD = '12345';
 const RECIPIENTS = ['0x3796Fd13E83d53B8378A2C849F0E1AcA29e8C144'];
 const POOLS = {
   '0x9Dca0717054729D9A199162508C491ee6E5998cE': {
     name: 'bigsur',
     address: '0x9Dca0717054729D9A199162508C491ee6E5998cE',
+    size: 2
+  },
+  '0x4Dd7deF2eD4c5eeDc234bC9f56A5106baCf1c1Ab': {
+    name: 'tahoe',
+    address: '0x4Dd7deF2eD4c5eeDc234bC9f56A5106baCf1c1Ab',
     size: 4
   }
 }
@@ -27,7 +35,7 @@ const POOLS = {
 /** Functions **/
 
 // @desc Send Transactions
-function sendTransaction(transactions, account, receiver, date) {
+function sendTransaction(transactions, sendTimes, account, receiver, date) {
 
   // Send Transaction
   let transaction = web3.eth.sendTransaction({
@@ -36,64 +44,114 @@ function sendTransaction(transactions, account, receiver, date) {
     'value': 10000
   })
 
-  // Create Object
-  let obj = {
-    sent: date,
-    data: transaction
-  }
-
   // Add to Transactions Set
-  transactions.push(obj)
+  transactions.push(transaction)
+  sendTimes.push(date)
 
 }
 
-async function getResult(transaction, data, results, blocks) {
-  p = new Promise(async function (resolve, reject) {
-    // Get Mined Time (if not in cache)
-    if (!blocks[data.blockNumber]) {
-      let block = await web3.eth.getBlock(data.blockNumber)
-      let newBlock = {
-        miner: block.miner,
-        blockNumber: data.blockNumber,
-        timestamp: block.timestamp,
-        convertedTimestamp: new Date(block.timestamp * 1000)
-      }
-      blocks[data.blockNumber] = newBlock;
-    }
-
+function getResult(transaction, blocks, timeDifference) {
     // Log Information
+    let dur = (blocks[transaction.value.blockNumber].convertedTimestamp - transaction.sent) - timeDifference
     let result = {
-      hash: data.transactionHash,
-      blockNumber: data.blockNumber,
+      hash: transaction.value.transactionHash,
+      blockNumber: transaction.value.blockNumber,
       sent: transaction.sent,
-      miner: blocks[data.blockNumber].miner,
-      mined: blocks[data.blockNumber].convertedTimestamp,
-      duration: Math.abs(blocks[data.blockNumber].convertedTimestamp - transaction.sent)
+      miner: blocks[transaction.value.blockNumber].miner,
+      mined: blocks[transaction.value.blockNumber].convertedTimestamp,
+      duration: dur
     }
-    resolve(result);
-  })
-  return p;
+  return result;
 }
 
-async function getTransactionResults(transactions) {
+function getTransactionResults(transactions, blocks, timeDifference) {
   // Create Promise
-  p = new Promise(async function (resolve, reject) {
-    let blocks = {}   // Block Cache
     let results = {}  // Results
 
     // Create Evaluation Input
-    count = 0;
-    for (let i = 0; i < NUM_TRANSACTIONS; i++) {
+    for (let i = 0; i < transactions.length; i++) {
       transaction = transactions[i];
-      count++;
-      let data = await transaction.data.then(async (data) => {
-        let result = await getResult(transaction, data, results, blocks);
-        results[data.transactionHash] = result;
-      })
+      if (transaction.status == 'rejected') continue;
+      let result = getResult(transaction, blocks, timeDifference);
+      results[result.hash] = result;
     }
-    if (count == NUM_TRANSACTIONS) resolve(results);
+
+  return results;
+}
+
+async function getMinedBlocks(transactions) {
+  p = new Promise(async function (resolve, reject) {
+  let blocks = {};
+
+  for (let i = 0; i < transactions.length; i++) {
+    let trans = transactions[i];
+    if (trans.status == 'rejected') continue;
+    blockNumber = trans.value.blockNumber;
+    if (blocks[blockNumber]) continue;
+    let block = await web3.eth.getBlock(blockNumber);
+    let newBlock = {
+      miner: block.miner,
+      blockNumber: blockNumber,
+      timestamp: block.timestamp,
+      convertedTimestamp: new Date(block.timestamp * 1000)
+    }
+    blocks[blockNumber] = newBlock;
+  }
+
+    resolve(blocks);
+  });
+  return p;
+}
+
+async function sendBatchedTransactions(account) {
+  p = new Promise(async function (resolve, reject) {
+
+  let transactions = []
+  let sendTimes = []
+
+  // Send Transactions in Batches
+  let fulfilled = 0; let rejected = 0; let sent = 0;
+  let returnedTransactions;
+  console.log("SENDING TRANSACTIONS")
+  while (fulfilled < NUM_TRANSACTIONS) {
+
+    // Unlock Account
+    await web3.eth.personal.unlockAccount(account, PASSWORD, 600)
+
+    // Send Batch Size Amount of Transactions
+    let determinedSize = (NUM_TRANSACTIONS - fulfilled) > BATCH_SIZE ? BATCH_SIZE : NUM_TRANSACTIONS - fulfilled; 
+    for (let i = 0; i < determinedSize; i++) {
+      let receiver = RECIPIENTS[0];
+      let currentDate = new Date()
+      sendTransaction(transactions, sendTimes, account, receiver, currentDate);
+    }
+    sent += determinedSize;
+    console.log("Sent " + determinedSize + " transactions")
+
+    // Check for Completed Transactions
+    returnedTransactions = await Promise.allSettled(transactions)
+
+    // Determine how many Rejected/Fulfilled
+    rejected = 0; fulfilled = 0;
+    for (let i = 0; i < returnedTransactions.length; i++) {
+      if (returnedTransactions[i].status == 'rejected') rejected++;
+      else fulfilled++;
+    }
+    console.log(" - Total Sent: " + sent)
+    console.log(" - Total Rejected: " + rejected)
+    console.log(" - Total Fulfilled: " + fulfilled)
+    console.log(" - Total Remaining: " + (NUM_TRANSACTIONS - fulfilled))
+  }
+  console.log("")
+
+  // Add Send Times
+  for (let i = 0; i < returnedTransactions.length; i++) {  
+    returnedTransactions[i].sent = sendTimes[i]
+  }
+  resolve(returnedTransactions);
   })
   return p;
+
 }
 
 // @desc  Main Driver
@@ -102,13 +160,12 @@ async function getTransactionResults(transactions) {
 const main = async () => {
 
   // Setup Web3
-  let peerCount = await web3.eth.net.getPeerCount()
-  let accounts = await web3.eth.getAccounts()
-  let account = accounts[0]
-  let balance = await web3.eth.getBalance(account)
-  await web3.eth.personal.unlockAccount(account, '12345', 60000)
+  const peerCount = await web3.eth.net.getPeerCount()
+  const accounts = await web3.eth.getAccounts()
+  const account = accounts[0]
+  const balance = await web3.eth.getBalance(account)
 
-  // Log Information
+  // Run Information
   console.log("RUN INFORMATION")
   console.log("Peer Count: " + peerCount)
   console.log("Account: " + account)
@@ -116,25 +173,54 @@ const main = async () => {
   console.log("Target Transaction Amount: " + NUM_TRANSACTIONS)
   console.log("")
 
+  // Unlock Account and Determine Latency
+  const beforeUnlockTime = new Date()
+  await web3.eth.personal.unlockAccount(account, PASSWORD, 600)
+  const afterUnlockTime = new Date()
+  const latency = (afterUnlockTime - beforeUnlockTime) / 2
+
+  // Find Difference in Time Synchronization ...
+  // ... by sending and waiting for 1 transaction
+  let transaction = await web3.eth.sendTransaction({
+    'from': account,
+    'to': RECIPIENTS[0],
+    'value': 10000
+  })
+  const afterTransactionTime = new Date()
+
+  // Get Block Timestamp
+  const setupBlock = await web3.eth.getBlock(transaction.blockNumber)
+  const setupBlockMineTime = new Date(setupBlock.timestamp * 1000)
+  const timeDifference = setupBlockMineTime - afterTransactionTime - latency
+
+  // Run-Time Information
+  console.log("RUN-TIME INFORMATION")
+  console.log("Latency: " + latency)
+  console.log("Received Confirmation At: " + afterTransactionTime)
+  console.log("Block Timestamp: " + setupBlockMineTime)
+  console.log("Timestamp Difference (ms): " + timeDifference)
+  console.log("")
+
   // Create List of Transactions
   let transactions = []
+  let sendTimes = []
 
-  // Send Transactions without Waiting
-  for (i = 0; i < NUM_TRANSACTIONS; i++) {
-    let receiver = RECIPIENTS[0];
-    let currentDate = new Date()
-    sendTransaction(transactions, account, receiver, currentDate);
-  }
+  // Send Transactions and Await Completion
+  const completedTransactions = await sendBatchedTransactions(account);
 
-  // Get Transaction Results for Evaluation
-  const results = await getTransactionResults(transactions);
+  // Get Completed Blocks
+  const completedBlocks = await getMinedBlocks(completedTransactions);
+
+  // Compute Results
+  const results = getTransactionResults(completedTransactions, completedBlocks, timeDifference);
 
   // Set Up Results per Pool
   let poolResults = {}
   for (const pool in POOLS) {
     poolResults[POOLS[pool].address] = {
       duration: 0,
-      transactionCount: 0
+      transactionCount: 0,
+      blocks: new Set()
     }
   }
 
@@ -147,22 +233,26 @@ const main = async () => {
     // Durations per Pool
     poolResults[results[result].miner].transactionCount += 1
     poolResults[results[result].miner].duration += results[result].duration
+    poolResults[results[result].miner].blocks.add(results[result].blockNumber)
 
   }
 
   // Print Total Evaluation Results
   console.log("NETWORK PERFORMANCE EVALUATION")
+  console.log("Number of Blocks Mined: " + Object.keys(completedBlocks).length)
   console.log("Total Duration (ms): " + totalDuration)
+  console.log("Duration per Transaction (ms): " + (totalDuration / NUM_TRANSACTIONS))
   console.log("")
 
   // Print Pool Evaluation Results
   console.log("POOL-SPECIFIC PERFORMANCE EVALUATION")
   for (const pool in poolResults) {
     console.log("Pool " + POOLS[pool].name + " Results")
-    console.log("  Number of Miners: " + POOLS[pool].size)
-    console.log("  Transaction Count: " + poolResults[pool].transactionCount)
-    console.log("  Transaction Percentage: " + (poolResults[pool].transactionCount / NUM_TRANSACTIONS * 100) + "%")
-    console.log("  Average Transaction Duration (ms): " + (poolResults[pool].duration / poolResults[pool].transactionCount))
+    console.log(" - Number of Miners: " + POOLS[pool].size)
+    console.log(" - Number of Blocks Mined: " + poolResults[pool].blocks.size)
+    console.log(" - Transaction Count: " + poolResults[pool].transactionCount)
+    console.log(" - Transaction Percentage: " + (poolResults[pool].transactionCount / NUM_TRANSACTIONS * 100) + "%")
+    console.log(" - Average Transaction Duration (ms): " + (poolResults[pool].duration / poolResults[pool].transactionCount))
   }
 
 }
