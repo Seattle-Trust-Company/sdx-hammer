@@ -14,20 +14,30 @@ let web3 = new Web3("http://localhost:8000");
 
 /** Globals **/
 
-const NUM_TRANSACTIONS = 4;
-const BATCH_SIZE = 2;
+const NUM_TRANSACTIONS = 32000;
+const BATCH_SIZE = 1500;
 const PASSWORD = '12345';
 const RECIPIENTS = ['0x3796Fd13E83d53B8378A2C849F0E1AcA29e8C144'];
 const POOLS = {
-  '0x9Dca0717054729D9A199162508C491ee6E5998cE': {
+  '0x9dca0717054729d9a199162508c491ee6e5998ce': {
     name: 'bigsur',
-    address: '0x9Dca0717054729D9A199162508C491ee6E5998cE',
+    address: '0x9dca0717054729d9a199162508c491ee6e5998ce',
     size: 2
   },
-  '0x4Dd7deF2eD4c5eeDc234bC9f56A5106baCf1c1Ab': {
+  '0x4dd7def2ed4c5eedc234bc9f56a5106bacf1c1ab': {
     name: 'tahoe',
-    address: '0x4Dd7deF2eD4c5eeDc234bC9f56A5106baCf1c1Ab',
+    address: '0x4dd7def2ed4c5eedc234bc9f56a5106bacf1c1ab',
     size: 4
+  },
+  '0x0f5eff50a09c54aa3380ad37633b44f9eddba6b3': {
+    name: 'samesame',
+    address: '0x0f5eff50a09c54aa3380ad37633b44f9eddba6b3',
+    size: 8
+  },
+  '0x45f7ea5f4bcea58507580ee7a0ac8375abcfbdf0': {
+    name: 'babyrays',
+    address: '0x45f7ea5f4bcea58507580ee7a0ac8375abcfbdf0',
+    size: 16
   }
 }
 
@@ -231,9 +241,10 @@ const main = async () => {
     totalDuration += results[result].duration
 
     // Durations per Pool
-    poolResults[results[result].miner].transactionCount += 1
-    poolResults[results[result].miner].duration += results[result].duration
-    poolResults[results[result].miner].blocks.add(results[result].blockNumber)
+    let miner = results[result].miner.toLowerCase();
+    poolResults[miner].transactionCount += 1
+    poolResults[miner].duration += results[result].duration
+    poolResults[miner].blocks.add(results[result].blockNumber)
 
   }
 
